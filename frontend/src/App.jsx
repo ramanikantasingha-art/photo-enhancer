@@ -20,6 +20,7 @@ function App() {
   const [profile, setProfile] = useState('natural')
   const [strength, setStrength] = useState(70)
   const [autoCrop, setAutoCrop] = useState(true)
+  const [framing, setFraming] = useState('standard')
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0]
@@ -82,7 +83,8 @@ function App() {
       height: height,
       profile,
       strength: strength / 100,
-      auto_crop: autoCrop
+      auto_crop: autoCrop,
+      framing
     })
 
     try {
@@ -279,6 +281,28 @@ function App() {
                   />
                   <span className="ml-2 text-sm font-medium text-gray-700">Auto-center face without stretching</span>
                 </label>
+
+                {autoCrop && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">Photo framing</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        ['loose', 'More shoulders'],
+                        ['standard', 'Passport'],
+                        ['close', 'Closer face'],
+                      ].map(([value, label]) => (
+                        <button
+                          type="button"
+                          key={value}
+                          onClick={() => setFraming(value)}
+                          className={`rounded-lg border px-2 py-2 text-xs font-semibold transition-colors ${framing === value ? 'border-blue-600 bg-blue-50 text-blue-800' : 'border-gray-200 hover:bg-gray-50'}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex items-center justify-between">
                   <label className="flex items-center cursor-pointer">
