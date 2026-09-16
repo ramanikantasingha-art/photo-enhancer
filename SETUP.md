@@ -34,10 +34,21 @@ A modern web application that transforms regular photos into professional passpo
 - Lucide React (Icons)
 - Axios (HTTP client)
 
-## Prerequisites
+## Windows one-click setup (recommended)
 
-- Python 3.8 or higher
-- Node.js 16 or higher
+1. Install **Python 3.12** from [python.org](https://www.python.org/downloads/) and select **Add Python to PATH** during installation.
+2. Install the current **Node.js LTS** version from [nodejs.org](https://nodejs.org/).
+3. Download this repository as a ZIP and extract it completely. Do not run it from inside the ZIP.
+4. Double-click **`setup_windows.bat`** once. Wait for the green `SETUP COMPLETE` message; the first setup can take 10–20 minutes and downloads a 176 MB AI model.
+5. Double-click **`run_windows.bat`** whenever you want to use the app. It opens automatically at `http://127.0.0.1:3000`.
+6. Keep the two Photo Enhancer command windows open while using the app. Double-click **`stop_windows.bat`** to close both services.
+
+If setup fails, the installer keeps the error visible. Send a screenshot of the complete window for diagnosis. The corrected installer does not use the old `^<=` batch expression that caused the earlier Windows error.
+
+## Prerequisites for manual setup
+
+- Python 3.10–3.12 (Python 3.12 recommended)
+- Node.js 18 or higher (current LTS recommended)
 - npm or yarn
 
 ## Installation
