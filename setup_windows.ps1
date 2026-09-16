@@ -80,7 +80,7 @@ try {
 
 Write-Step "Downloading the background-removal AI model"
 Write-Host "The model is about 176 MB. Please wait until it finishes."
-& $venvPython -c "from rembg import new_session; new_session('u2net'); print('Background-removal model is ready.')"
+& $venvPython -c "from rembg import new_session; new_session('u2net_human_seg'); print('Portrait background-removal model is ready.')"
 if ($LASTEXITCODE -ne 0) { Stop-WithHelp "The AI model download failed. Check your internet connection and run setup again." }
 
 Write-Step "Running final checks"
