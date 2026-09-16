@@ -2,7 +2,7 @@ import { useState, useRef } from 'react'
 import { Upload, Download, Image as ImageIcon, CheckCircle2, AlertCircle, Loader2, Camera } from 'lucide-react'
 import axios from 'axios'
 
-const API_URL = import.meta.env.PROD ? '/api' : 'http://localhost:8000'
+const API_URL = import.meta.env.PROD ? '/api' : `http://${window.location.hostname}:8000`
 
 function App() {
   const [selectedFile, setSelectedFile] = useState(null)
@@ -97,7 +97,9 @@ function App() {
       setProcessedUrl(url)
       setSuccess(true)
     } catch (err) {
-      let message = 'Failed to process image. Please try again.'
+      let message = err.response
+        ? 'The backend rejected the image. Please check the backend window.'
+        : 'Cannot reach the enhancement backend. Check the Photo Enhancer Backend window.'
       if (err.response?.data instanceof Blob) {
         try {
           const body = JSON.parse(await err.response.data.text())
