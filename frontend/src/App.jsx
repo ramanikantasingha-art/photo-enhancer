@@ -17,6 +17,9 @@ function App() {
   const [backgroundColor, setBackgroundColor] = useState('#FFFFFF')
   const [width, setWidth] = useState(1200)
   const [height, setHeight] = useState(1600)
+  const [profile, setProfile] = useState('natural')
+  const [strength, setStrength] = useState(70)
+  const [autoCrop, setAutoCrop] = useState(true)
 
   const handleFileSelect = (e) => {
     const file = e.target.files[0]
@@ -76,7 +79,10 @@ function App() {
       bg_color_g: rgb.g,
       bg_color_b: rgb.b,
       width: width,
-      height: height
+      height: height,
+      profile,
+      strength: strength / 100,
+      auto_crop: autoCrop
     })
 
     try {
@@ -91,7 +97,16 @@ function App() {
       setProcessedUrl(url)
       setSuccess(true)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to process image. Please try again.')
+      let message = 'Failed to process image. Please try again.'
+      if (err.response?.data instanceof Blob) {
+        try {
+          const body = JSON.parse(await err.response.data.text())
+          message = body.detail || message
+        } catch (_) { /* keep friendly fallback */ }
+      } else if (err.response?.data?.detail) {
+        message = err.response.data.detail
+      }
+      setError(message)
     } finally {
       setLoading(false)
     }
@@ -212,9 +227,57 @@ function App() {
             )}
 
             <div className="mt-6 pt-6 border-t border-gray-200">
-              <h3 className="text-lg font-semibold mb-4">Processing Options</h3>
+              <h3 className="text-lg font-semibold mb-1">Processing Options</h3>
+              <p className="text-xs text-gray-500 mb-4">Natural mode preserves identity and real skin texture.</p>
               
               <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Enhancement profile</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      ['natural', 'Natural', 'Best default'],
+                      ['restore', 'Restore', 'Soft/old photos'],
+                      ['document', 'Document', 'Extra clarity'],
+                    ].map(([value, label, hint]) => (
+                      <button
+                        type="button"
+                        key={value}
+                        onClick={() => setProfile(value)}
+                        className={`rounded-lg border px-2 py-2 text-left transition-colors ${profile === value ? 'border-blue-600 bg-blue-50 text-blue-800' : 'border-gray-200 hover:bg-gray-50'}`}
+                      >
+                        <span className="block text-sm font-semibold">{label}</span>
+                        <span className="block text-[10px] text-gray-500">{hint}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm font-medium text-gray-700">
+                    <label htmlFor="strength">Enhancement strength</label>
+                    <span>{strength}%</span>
+                  </div>
+                  <input
+                    id="strength"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={strength}
+                    onChange={(e) => setStrength(Number(e.target.value))}
+                    className="w-full accent-blue-600"
+                  />
+                </div>
+
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoCrop}
+                    onChange={(e) => setAutoCrop(e.target.checked)}
+                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                  />
+                  <span className="ml-2 text-sm font-medium text-gray-700">Auto-center face without stretching</span>
+                </label>
+
                 <div className="flex items-center justify-between">
                   <label className="flex items-center cursor-pointer">
                     <input
@@ -371,7 +434,7 @@ function App() {
         </div>
 
         <div className="mt-8 text-center text-sm text-gray-500">
-          <p>Automatic enhancements: Background cleanup • Face centering • Brightness & sharpness • Passport-style framing</p>
+          <p>Identity-safe processing • No face generation • No geometry stretching • Natural skin texture</p>
         </div>
       </div>
     </div>
