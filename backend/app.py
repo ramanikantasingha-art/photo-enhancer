@@ -30,6 +30,7 @@ mp_face = mp.solutions.face_detection
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_OUTPUT_PIXELS = 20_000_000
 ALLOWED_PROFILES = {"natural", "restore", "document"}
+ALLOWED_FRAMING = {"standard", "loose", "close"}
 _BACKGROUND_SESSION = None
 
 
@@ -68,12 +69,14 @@ def _crop_without_stretching(
     face: tuple[int, int, int, int],
     out_width: int,
     out_height: int,
+    framing: str = "standard",
 ) -> np.ndarray:
     """Crop to the output ratio while positioning the head naturally."""
     h, w = image.shape[:2]
     x, y, fw, fh = face
     ratio = out_width / out_height
-    crop_h = max(fh * 2.45, fw * 1.85 / ratio)
+    frame_scale = {"close": 2.25, "standard": 2.65, "loose": 3.05}[framing]
+    crop_h = max(fh * frame_scale, fw * 1.85 / ratio)
     crop_w = crop_h * ratio
     if crop_w > w:
         crop_w = float(w)
@@ -85,7 +88,9 @@ def _crop_without_stretching(
     face_cx = x + fw / 2
     face_cy = y + fh / 2
     left = float(np.clip(face_cx - crop_w / 2, 0, max(0, w - crop_w)))
-    top = float(np.clip(face_cy - crop_h * 0.39, 0, max(0, h - crop_h)))
+    # Put the face centre around 43% down the canvas: visible hair margin above,
+    # useful shoulder area below, and less risk of cutting the crown.
+    top = float(np.clip(face_cy - crop_h * 0.43, 0, max(0, h - crop_h)))
     x1, y1 = int(round(left)), int(round(top))
     x2, y2 = int(round(left + crop_w)), int(round(top + crop_h))
     crop = image[y1:y2, x1:x2]
@@ -133,7 +138,7 @@ def _detail_recovery(image: np.ndarray, profile: str, strength: float) -> np.nda
 
     sigma = 1.15 if profile == "restore" else 1.35
     blur = cv2.GaussianBlur(base, (0, 0), sigma)
-    amount = (0.22 if profile == "natural" else 0.34) * strength
+    amount = (0.30 if profile == "natural" else 0.46) * strength
     sharpened = cv2.addWeighted(base, 1 + amount, blur, -amount, 0)
 
     # Apply detail recovery to real edges, not smooth skin or compression noise.
@@ -142,6 +147,40 @@ def _detail_recovery(image: np.ndarray, profile: str, strength: float) -> np.nda
     edge_mask = np.clip(edge_mask * 1.35, 0, 1)[:, :, None]
     result = base.astype(np.float32) * (1 - edge_mask) + sharpened.astype(np.float32) * edge_mask
     return np.clip(result, 0, 255).astype(np.uint8)
+
+
+def _enhance_face_detail(image: np.ndarray, strength: float) -> np.ndarray:
+    """Add controlled local clarity to the detected face without smoothing it."""
+    try:
+        x, y, fw, fh = _largest_face(image)
+    except ValueError:
+        return image
+
+    h, w = image.shape[:2]
+    pad_x, pad_y = int(fw * 0.14), int(fh * 0.18)
+    x1, y1 = max(0, x - pad_x), max(0, y - pad_y)
+    x2, y2 = min(w, x + fw + pad_x), min(h, y + fh + pad_y)
+    roi = image[y1:y2, x1:x2]
+    if roi.size == 0:
+        return image
+
+    lab = cv2.cvtColor(roi, cv2.COLOR_BGR2LAB)
+    l_chan, a_chan, b_chan = cv2.split(lab)
+    local = cv2.createCLAHE(clipLimit=1.45, tileGridSize=(6, 6)).apply(l_chan)
+    l_chan = cv2.addWeighted(l_chan, 0.78, local, 0.22, 0)
+    clarified = cv2.cvtColor(cv2.merge((l_chan, a_chan, b_chan)), cv2.COLOR_LAB2BGR)
+    blur = cv2.GaussianBlur(clarified, (0, 0), 1.0)
+    clarified = cv2.addWeighted(clarified, 1 + 0.22 * strength, blur, -0.22 * strength, 0)
+
+    yy, xx = np.ogrid[: roi.shape[0], : roi.shape[1]]
+    cx, cy = roi.shape[1] / 2, roi.shape[0] / 2
+    ellipse = ((xx - cx) / max(cx, 1)) ** 2 + ((yy - cy) / max(cy, 1)) ** 2
+    mask = np.clip((1.0 - ellipse) * 2.8, 0, 1).astype(np.float32)
+    mask = cv2.GaussianBlur(mask, (0, 0), max(3, fw * 0.025))[:, :, None]
+    mixed = roi.astype(np.float32) * (1 - mask) + clarified.astype(np.float32) * mask
+    output = image.copy()
+    output[y1:y2, x1:x2] = np.clip(mixed, 0, 255).astype(np.uint8)
+    return output
 
 
 def _replace_background(image: np.ndarray, bg_color: tuple[int, int, int]) -> np.ndarray:
@@ -180,17 +219,20 @@ def process_passport_image(
     profile: str = "natural",
     strength: float = 0.7,
     auto_crop: bool = True,
+    framing: str = "standard",
 ) -> Image.Image:
     if width < 200 or height < 200 or width * height > MAX_OUTPUT_PIXELS:
         raise ValueError("Output must be at least 200×200 and no more than 20 megapixels")
     if profile not in ALLOWED_PROFILES:
         raise ValueError("Profile must be natural, restore, or document")
+    if framing not in ALLOWED_FRAMING:
+        raise ValueError("Framing must be standard, loose, or close")
     strength = float(np.clip(strength, 0.0, 1.0))
 
     image = _decode_image(image_bytes)
     face = _largest_face(image)
     if auto_crop:
-        image = _crop_without_stretching(image, face, width, height)
+        image = _crop_without_stretching(image, face, width, height, framing)
     else:
         pil = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
         pil = ImageOps.fit(pil, (width, height), method=Image.Resampling.LANCZOS, centering=(0.5, 0.45))
@@ -199,6 +241,7 @@ def process_passport_image(
     image = _limited_white_balance(image)
     image = _natural_tone(image, strength)
     image = _detail_recovery(image, profile, strength)
+    image = _enhance_face_detail(image, strength)
     if remove_bg:
         image = _replace_background(image, bg_color)
     return Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
@@ -221,6 +264,7 @@ async def process_image(
     profile: str = "natural",
     strength: float = 0.7,
     auto_crop: bool = True,
+    framing: str = "standard",
 ):
     try:
         if not (file.content_type or "").startswith("image/"):
@@ -228,7 +272,7 @@ async def process_image(
         contents = await file.read()
         bg_color = tuple(int(np.clip(v, 0, 255)) for v in (bg_color_r, bg_color_g, bg_color_b))
         processed = process_passport_image(
-            contents, remove_bg, bg_color, width, height, profile, strength, auto_crop
+            contents, remove_bg, bg_color, width, height, profile, strength, auto_crop, framing
         )
         output = io.BytesIO()
         processed.save(output, format="JPEG", quality=95, subsampling=0, optimize=True)
