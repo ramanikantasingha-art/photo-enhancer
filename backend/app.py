@@ -10,7 +10,7 @@ from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from PIL import Image, ImageFilter, ImageOps
-from rembg import remove
+from rembg import new_session, remove
 
 app = FastAPI(title="Natural Passport Photo Enhancer API", version="2.0.0")
 app.add_middleware(
@@ -30,6 +30,7 @@ mp_face = mp.solutions.face_detection
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 MAX_OUTPUT_PIXELS = 20_000_000
 ALLOWED_PROFILES = {"natural", "restore", "document"}
+_BACKGROUND_SESSION = None
 
 
 def _decode_image(image_bytes: bytes) -> np.ndarray:
@@ -144,16 +145,26 @@ def _detail_recovery(image: np.ndarray, profile: str, strength: float) -> np.nda
 
 
 def _replace_background(image: np.ndarray, bg_color: tuple[int, int, int]) -> np.ndarray:
-    """Remove background with a soft, alpha-matted edge."""
+    """Remove background with a portrait-specific model and safe mask."""
+    global _BACKGROUND_SESSION
+    if _BACKGROUND_SESSION is None:
+        _BACKGROUND_SESSION = new_session("u2net_human_seg")
+
     source = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     removed = remove(
         source,
-        alpha_matting=True,
-        alpha_matting_foreground_threshold=245,
-        alpha_matting_background_threshold=15,
-        alpha_matting_erode_size=5,
+        session=_BACKGROUND_SESSION,
+        alpha_matting=False,
+        post_process_mask=True,
     ).convert("RGBA")
-    alpha = removed.getchannel("A").filter(ImageFilter.GaussianBlur(0.65))
+
+    alpha_array = np.asarray(removed.getchannel("A"))
+    coverage = float(np.mean(alpha_array > 32))
+    if coverage < 0.12:
+        # Never return a result where a failed mask erases the person.
+        return image
+
+    alpha = removed.getchannel("A").filter(ImageFilter.GaussianBlur(0.8))
     foreground = Image.merge("RGBA", (*removed.split()[:3], alpha))
     background = Image.new("RGBA", removed.size, (*bg_color, 255))
     composed = Image.alpha_composite(background, foreground).convert("RGB")
