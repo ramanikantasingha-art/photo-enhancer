@@ -18,8 +18,8 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Starting Photo Enhancer...
-start "Photo Enhancer Backend" /D "%~dp0backend" cmd.exe /k ""%~dp0.venv\Scripts\python.exe" -m uvicorn app:app --host 127.0.0.1 --port 8000"
+echo Starting Photo Enhancer Hybrid Engine V3...
+start "Photo Enhancer Backend" /D "%~dp0backend" cmd.exe /k ""%~dp0.venv\Scripts\python.exe" -m uvicorn app_v3:app --host 127.0.0.1 --port 8000"
 start "Photo Enhancer Frontend" /D "%~dp0frontend" cmd.exe /k "npm.cmd run dev -- --host 127.0.0.1"
 
 echo Waiting for the backend and web interface...

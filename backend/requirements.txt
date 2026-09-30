@@ -6,3 +6,5 @@ numpy==1.26.3
 Pillow==10.2.0
 mediapipe==0.10.14
 rembg==2.0.56
+onnxruntime>=1.18,<2
+gdown>=5.2,<6
