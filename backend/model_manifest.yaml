@@ -1,0 +1,55 @@
+engine: hybrid-engine-v3
+policy: commercial-safe-only
+reviewed: 2026-09-30
+
+providers:
+  segmentation_primary:
+    candidate: BiRefNet_HR-matting
+    upstream: ZhengPeng7/BiRefNet
+    license: MIT
+    role: high-resolution portrait alpha matte
+    status: benchmark_required
+    notes:
+      - Prefer HR-matting/general-matting checkpoint for hair and soft edges.
+      - Freeze exact weight hash before production.
+
+  segmentation_fallback:
+    candidate: U-2-Net-family
+    role: fallback person segmentation only
+    status: benchmark_required
+    notes:
+      - Existing prototype uses u2net_human_seg through rembg.
+      - Keep only if exact code+weight license manifest is verified at packaging time.
+
+  generative_edit_primary:
+    candidate: Qwen-Image-Edit-2511-family
+    license: Apache-2.0
+    role: optional masked boundary repair / background synthesis
+    status: benchmark_required
+    hard_restrictions:
+      - NEVER edit protected face interior in GENERAL_ID or OFFICIAL mode.
+      - NEVER generate eyes, nose, mouth, jaw, skin texture, expression, hairline identity cues.
+      - Output is provisional until deterministic post-checks pass.
+
+  generative_t2i_fallback:
+    candidate: FLUX.1-schnell
+    license: Apache-2.0
+    role: background-only generation or offline test fixture generation
+    status: optional
+    hard_restrictions:
+      - Not a face-restoration provider.
+      - Not accepted for identity-bearing pixels.
+
+excluded_or_restricted:
+  - candidate: BRIA-RMBG-2.0
+    reason: model weights are non-commercial without separate commercial agreement
+  - candidate: FLUX.1-dev
+    reason: upstream model license is non-commercial/restricted for this shop use unless separately licensed
+  - candidate: FLUX.1-Fill-dev
+    reason: upstream model license is non-commercial/restricted for this shop use unless separately licensed
+
+selection_rule:
+  - No provider becomes default because it is popular.
+  - Benchmark on frozen Golden Reference corpus and target Windows hardware.
+  - Require license verification, deterministic failure handling, identity protection, quality gates, and rollback.
+  - Store exact model revision, file hash, runtime versions, and threshold calibration artifact.
